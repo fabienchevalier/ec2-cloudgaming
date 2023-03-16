@@ -1,0 +1,187 @@
+# Build an AMI ready to be used for CloudGaming using NICE DCV Server on Windows Server 2019
+# Based on a template made by AWS : 
+# https://github.com/aws-samples/amazon-ec2-image-builder-samples/blob/master/CloudFormation/Windows/windows-server-2016-with-vscode/windows-server-2016-with-vscode.yml
+# Fabien CHEVALIER - 2023 https://fchevalier.net
+AWSTemplateFormatVersion: 2010-09-09
+
+Resources:
+  # Create an S3 Bucket for logs.
+  # When deleting the stack, make sure to empty the bucket first.
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html
+  ImageBuilderLogBucket:
+    Type: AWS::S3::Bucket
+    # If you want to delete the stack, but keep the bucket, set the DelectionPolicy to Retain.
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html
+    # DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # By default, AWS Services do not have permission to perform actions on your instances. This grants
+  # AWS Systems Manager (SSM) and EC2 Image Builder the necessary permissions to build an image.
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
+  # https://docs.aws.amazon.com/imagebuilder/latest/userguide/image-builder-setting-up.html
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      Comment: Role to be used by instance during image build.
+    Properties:
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - !Sub 'ec2.${AWS::URLSuffix}'
+        Version: "2012-10-17"
+      Path: /executionServiceEC2Role/
+
+  # Policy to allow the instance to write to the S3 bucket (via instance role / instance profile).
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy.html
+  InstanceRoleLoggingPolicy:
+    Type: AWS::IAM::Policy
+    Metadata:
+      Comment: Allows the instance to save log files to an S3 bucket.
+    Properties:
+      PolicyName: ImageBuilderLogBucketPolicy
+      Roles:
+        - Ref: InstanceRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:PutObject
+            Effect: Allow
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${BUCKET}/*
+                  - BUCKET:
+                      Ref: ImageBuilderLogBucket
+
+  # To pass the InstanceRole to an EC2 instance, we need an InstanceProfile.
+  # This profile will be used during the image build process.
+  # https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /executionServiceEC2Role/
+      Roles:
+        - Ref: InstanceRole
+
+  # Specifies the infrastructure within which to build and test your image.
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-imagebuilder-infrastructureconfiguration.html
+  WindowsServer2019CloudGamingInfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: WindowsServer2019CloudGamingInfrastructureConfiguration
+      InstanceProfileName:
+        Ref: InstanceProfile
+      # Specify an S3 bucket and EC2 Image Builder will save logs to the bucket.
+      Logging:
+        S3Logs:
+          S3BucketName:
+            Ref: ImageBuilderLogBucket
+          # S3KeyPrefix: 'my-imagebuilder-bucket-prefix'
+      # If you would like to keep the instance running after a failed build, set TerminateInstanceOnFailure to false.
+      # TerminateInstanceOnFailure: false
+      # If you do not have a default VPC or want to use a different VPC, you must specify the subnet ID to use
+      # SubnetId: 'subnet-id'
+
+  # Create a custom EC2 Image Builder component that downloads and installs Visual Studio Code. The component includes a
+  # validation step which will run after the install but before the image capture. Also included, is a test step which
+  # runs after the image is captured (EC2 Image Builder launches a new instance from the image and runs the test phase).
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-imagebuilder-component.html
+  WindowsServer2019CloudGamingNiceDCVServerComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: NiceDCVServer
+      Version: 0.0.1
+      Description: Install and Configure Nice DCV Server
+      ChangeDescription: First version
+      Platform: Windows
+      Data: |
+        name: InstallNiceDCVServer
+        description: Downloads, Installs, and Configures NICE DCV Server
+        schemaVersion: 1.0
+
+        phases:
+          - name: build
+            steps:
+              - 
+              - name: NiceDCVServerInstall
+                action: ExecutePowerShell
+                inputs:
+                  commands:
+                    - |
+                      # Set TLS 1.2 for Invoke-RestMethod
+                      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+                      # Set the download link to Nice DCV Server (64-bit installer)
+                      $downloadUrl = "https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-server-x64-Release.msi"
+
+                      # Set the path for our download, which will be in the temp directory
+                      $installerFile = "nice-dcv-server-x64-Release.msi"
+                      $installerDownloadPath = (Join-Path $env:TEMP $installerFile)
+
+                      # Set the default owner to the current user
+                      $installerOwner = [Environment]::UserName
+
+                      # Set Install Command Expression
+                      $msiExpression = "msiexec.exe /i $installerDownloadPath AUTOMATIC_SESSION_OWNER=$installerOwner ADDLOCAL=ALL /quiet /norestart /l*v dcv_install_msi.log"
+
+                      # Download the file
+                      Invoke-Webrequest $downloadUrl -UseBasicParsing -OutFile $installerDownloadPath
+
+                      # Install
+                      Invoke-Expression $msiExpression
+
+  # Recipe which references the latest (x.x.x) version of Windows Server 2016 English AMI with Desktop Experience).
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-imagebuilder-imagerecipe.html
+  WindowsServer2019CloudGamingImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: WindowsServer-2019-NICE-DCV-Server-x64
+      Version: 0.0.1
+      # ${AWS::Partition} returns the partition where you are running the CloudFormation template. For standard AWS regions, the
+      # partition is aws. For resources elsewhere, the partition is aws-partitionname. For example, China (Beijing and Ningxia)
+      # regions use aws-cn and AWS GovCloud (US) regions are aws-us-gov.
+      # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html
+      ParentImage: arn:aws:ec2:europe-west-1::image/ami-0355cf295348ba0df
+      Components:
+        - ComponentArn:
+            Ref: WindowsServer2019CloudGamingNiceDCVServerComponent
+
+  # The Image resource will show complete in CloudFormation once your image is done building. Use this resource later in your
+  # stack to reference the image within other resources.
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-imagebuilder-image.html
+  WindowServer2019WithNiceDCVServer:
+    Type: AWS::ImageBuilder::Image
+    Properties:
+      ImageRecipeArn:
+        Ref: WindowsServer2019CloudGamingImageRecipe
+      InfrastructureConfigurationArn:
+        Ref: WindowsServer2019CloudGamingNiceDCVServerComponent
+
+  # Create an SSM Parameter Store entry with our resulting ImageId.
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ssm-parameter.html
+  WindowServer2019WithNiceDCVServerParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Image Id for Window Server 2019 With NICE DCV Server
+      Name: /CloudGaming/Images/Windows_Server-2019-NiceDCV-Server-x64
+      Type: String
+      Value:
+        Fn::GetAtt: [WindowServer2019WithNiceDCVServer, ImageId]

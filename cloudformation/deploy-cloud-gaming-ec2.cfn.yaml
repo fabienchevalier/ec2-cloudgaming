@@ -1,0 +1,75 @@
+#CloudGaming template
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  CloudGamingVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      Tags:
+        - Key: Name
+          Value: vpc-CloudGaming
+  CloudGamingSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.0.0/24'
+      AvailabilityZone: eu-west-1a
+      Tags:
+        - Key: Name
+          Value: sub-CloudGaming
+  CloudGamingInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ig-CloudGaming
+  GatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref CloudGamingVPC
+      InternetGatewayId: !Ref CloudGamingInternetGateway
+  CloudGamingRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref CloudGamingVPC
+      Tags:
+        - Key: Name
+          Value: rt-CloudGaming
+  CloudGamingRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref CloudGamingRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref CloudGamingInternetGateway
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CloudGamingSubnet
+      RouteTableId: !Ref CloudGamingRouteTable
+  CloudGamingSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: CloudGaming-SG
+      VpcId: !Ref CloudGamingVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389 #RDP
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8443 #NICE DVC Server
+          ToPort: 8443
+          CidrIp: 0.0.0.0/0
+  CloudGamingInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: g4adn.xlarge
+      ImageId: ami-0dd81ccf5c7490c56 # Windows Server 2019
+      KeyName: CloudGamingKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref CloudGamingSecurityGroup
+          SubnetId: !Ref CloudGamingSubnet
