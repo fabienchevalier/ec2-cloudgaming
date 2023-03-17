@@ -1,13 +1,5 @@
 # :video_game: EC2 CloudFormation Gaming Template :cloud:
 
-- [:video\_game: EC2 CloudFormation Gaming Template :cloud:](#video_game-ec2-cloudformation-gaming-template-cloud)
-  - [:wrench: How to set it up](#wrench-how-to-set-it-up)
-    - [Prerequisite](#prerequisite)
-    - [Deploy](#deploy)
-    - [Configure](#configure)
-    - [Play :video\_game:](#play-video_game)
-
-
 This is a simple CloudFormation template that provision a g4ad.xlarge instance using the [g4ad graphics-intensive instances](https://aws.amazon.com/marketplace/pp/prodview-fzxvqp2r3vvgc) AMI.
 
 ## :wrench: How to set it up 
