@@ -13,7 +13,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       CidrBlock: '10.0.0.0/24'
-      AvailabilityZone: eu-west-1a
+      AvailabilityZone: eu-west-2a
       Tags:
         - Key: Name
           Value: sub-CloudGaming
@@ -54,22 +54,27 @@ Resources:
       VpcId: !Ref CloudGamingVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 3389 #RDP
-          ToPort: 3389
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 8443 #NICE DVC Server
           ToPort: 8443
-          CidrIp: 0.0.0.0/0
+          CidrIp: 0.0.0.0/0 #Replace that with your IP address
+  
   CloudGamingInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
       InstanceType: g4adn.xlarge
-      ImageId: ami-0dd81ccf5c7490c56 # Windows Server 2019
+      ImageId: ami-00d0096b223242201
       KeyName: CloudGamingKeyPair
+      Tags:
+        - Key: Name
+          Value: CloudGamingInstance
       NetworkInterfaces:
         - AssociatePublicIpAddress: true
           DeviceIndex: 0
           GroupSet:
             - !Ref CloudGamingSecurityGroup
           SubnetId: !Ref CloudGamingSubnet
+
+Outputs:
+  InstanceIP:
+    Value: !GetAtt Instance.PublicIp
+    Description: Public IP address of the EC2 instance
