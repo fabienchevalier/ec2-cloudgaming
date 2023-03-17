@@ -77,6 +77,6 @@ Download the [latest Nice DCV Client](https://download.nice-dcv.com/) for your O
 
 Connect via the public ip-address of your instance using `Administrator` as a login. Password would be the one that you retrieved in the JSON from awscli.
 
-Enjoy
+**Enjoy** :sunglasses:
 
-**Watch out**: Don't forget to shut down your instance after your session to avoid any useless costs.
+:warning: Don't forget to shut down your instance after your session to avoid any useless costs.
