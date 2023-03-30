@@ -11,7 +11,7 @@ Resources:
   CloudGamingSubnet:
     Type: 'AWS::EC2::Subnet'
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref CloudGamingVPC
       CidrBlock: '10.0.0.0/24'
       AvailabilityZone: eu-west-2a
       Tags:
@@ -50,19 +50,24 @@ Resources:
   CloudGamingSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
+      GroupDescription: CloudGaming Security Group
       GroupName: CloudGaming-SG
       VpcId: !Ref CloudGamingVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 8443 #NICE DVC Server
           ToPort: 8443
-          CidrIp: 0.0.0.0/0 #Replace that with your IP address
+          CidrIp: 0.0.0.0/0 #Replace that with your IP address (mask should be /32)
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0 #Replace that with your IP address (mask should be /32)  
   
   CloudGamingInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
-      InstanceType: g4adn.xlarge
-      ImageId: ami-00d0096b223242201
+      InstanceType: g4ad.xlarge
+      ImageId: ami-00c2cee0e1606fee3
       KeyName: CloudGamingKeyPair
       Tags:
         - Key: Name
@@ -73,8 +78,14 @@ Resources:
           GroupSet:
             - !Ref CloudGamingSecurityGroup
           SubnetId: !Ref CloudGamingSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvdf
+          Ebs:
+            VolumeSize: 128
+            VolumeType: st1
+
 
 Outputs:
   InstanceIP:
-    Value: !GetAtt Instance.PublicIp
+    Value: !GetAtt CloudGamingInstance.PublicIp
     Description: Public IP address of the EC2 instance
