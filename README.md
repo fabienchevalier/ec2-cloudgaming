@@ -71,6 +71,8 @@ That should give you the Administrator password on a JSON format :
 }
 ```
 
+Connect to the instance via RDP and run the PowerShell script from the PowerShell folder to install the Nice DCV Server (you can also use Parsec if you wish).
+
 ### Play :video_game:
 
 Download the [latest Nice DCV Client](https://download.nice-dcv.com/) for your OS.
